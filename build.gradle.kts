@@ -4,8 +4,8 @@ plugins {
     `maven-publish`
 }
 
-group = "com.thebombzen"
-version = "2.0.0"
+group = "com.traneptora"
+version = "2.1.0"
 
 repositories.mavenCentral()
 dependencies.compileOnly("org.jetbrains:annotations:24.1.0")
