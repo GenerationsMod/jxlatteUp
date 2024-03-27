@@ -4,7 +4,7 @@ plugins {
     `maven-publish`
 }
 
-group = "com.thebombzen"
+group = "com.traneptora"
 version = "2.0.0"
 
 repositories.mavenCentral()
