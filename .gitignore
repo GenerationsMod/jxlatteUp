@@ -11,3 +11,6 @@ output.png
 # test files
 /*.png
 /*.jxl
+
+.gradle
+.idea
