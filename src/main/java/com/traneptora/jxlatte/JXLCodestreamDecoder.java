@@ -23,6 +23,12 @@ import com.traneptora.jxlatte.io.PushbackInputStream;
 import com.traneptora.jxlatte.util.FlowHelper;
 import com.traneptora.jxlatte.util.IntPoint;
 import com.traneptora.jxlatte.util.MathHelper;
+import jdk.incubator.vector.FloatVector;
+import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
+
+import static com.traneptora.jxlatte.util.MathHelper.SPECIES;
+import static com.traneptora.jxlatte.util.MathHelper.minusOne;
 
 public class JXLCodestreamDecoder {
 
@@ -94,8 +100,7 @@ public class JXLCodestreamDecoder {
         int colorChannels = imageHeader.getColorChannelCount();
         int extraChannels = imageHeader.getExtraChannelCount();
         Patch[] patches = frame.getLFGlobal().patches;
-        for (int i = 0; i < patches.length; i++) {
-            Patch patch = patches[i];
+        for (Patch patch : patches) {
             if (patch.ref > 3)
                 throw new InvalidBitstreamException("Patch out of range");
             float[][][] refBuffer = references[patch.ref];
@@ -104,15 +109,15 @@ public class JXLCodestreamDecoder {
             if (refBuffer == null)
                 continue;
             if (patch.height + patch.origin.y > refBuffer[0].length
-                || patch.width + patch.origin.x > refBuffer[0][0].length)
-                    throw new InvalidBitstreamException("Patch too large");
+                    || patch.width + patch.origin.x > refBuffer[0][0].length)
+                throw new InvalidBitstreamException("Patch too large");
             for (int j = 0; j < patch.positions.length; j++) {
                 int x0 = patch.positions[j].x;
                 int y0 = patch.positions[j].y;
                 if (x0 < 0 || y0 < 0)
                     throw new InvalidBitstreamException("Patch size out of bounds");
                 if (patch.height + y0 > header.height
-                    || patch.width + x0 > header.width)
+                        || patch.width + x0 > header.width)
                     throw new InvalidBitstreamException("Patch size out of bounds");
                 for (int d = 0; d < colorChannels + extraChannels; d++) {
                     int c = d < colorChannels ? 0 : d - colorChannels + 1;
@@ -120,17 +125,73 @@ public class JXLCodestreamDecoder {
                     if (info.mode == 0)
                         continue;
                     boolean premult = imageHeader.hasAlpha()
-                        ? imageHeader.getExtraChannelInfo(info.alphaChannel).alphaAssociated
-                        : true;
+                            ? imageHeader.getExtraChannelInfo(info.alphaChannel).alphaAssociated
+                            : true;
                     boolean isAlpha = c > 0 &&
-                        imageHeader.getExtraChannelInfo(c - 1).type == ExtraChannelType.ALPHA;
+                            imageHeader.getExtraChannelInfo(c - 1).type == ExtraChannelType.ALPHA;
                     if (info.mode > 3 && header.upsampling > 1 && c > 0 &&
                             header.ecUpsampling[c - 1] << imageHeader.getExtraChannelInfo(c - 1).dimShift
-                            != header.upsampling) {
+                                    != header.upsampling) {
                         throw new InvalidBitstreamException("Alpha channel upsampling mismatch during patches");
                     }
+
                     for (int y = 0; y < patch.height; y++) {
-                        for (int x = 0; x < patch.width; x++) {
+
+                        int upperBound = SPECIES.loopBound(patch.width) * SPECIES.length();
+
+                        int x = 0;
+
+                        for (; x < upperBound; x += SPECIES.length()) {
+                            int oldX = x + x0;
+                            int oldY = y + y0;
+                            int newX = x + patch.origin.x;
+                            int newY = y + patch.origin.y;
+                            FloatVector oldSample = FloatVector.fromArray(SPECIES, frameBuffer[d][oldY], oldX);
+                            FloatVector newSample = FloatVector.fromArray(SPECIES, refBuffer[d][newY], newX);
+                            FloatVector alpha = FloatVector.zero(SPECIES), newAlpha = FloatVector.zero(SPECIES), oldAlpha = FloatVector.zero(SPECIES);
+                            if (info.mode > 3) {
+                                oldAlpha = imageHeader.hasAlpha() ? FloatVector.fromArray(SPECIES, frameBuffer[colorChannels + info.alphaChannel][oldY], oldX) : FloatVector.broadcast(SPECIES, 1.0f);
+                                newAlpha = imageHeader.hasAlpha() ? FloatVector.fromArray(SPECIES, refBuffer[colorChannels + info.alphaChannel][newY], newX) : FloatVector.broadcast(SPECIES, 1.0f);
+                                if (info.clamp)
+                                    newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                                if (info.mode < 6 || !isAlpha || !premult)
+                                    alpha = oldAlpha.add(newAlpha.mul(MathHelper.minusOne(oldAlpha)));
+                            }
+                            FloatVector sample;
+                            switch (info.mode) {
+                                case 0:
+                                    sample = oldSample;
+                                    break;
+                                case 1:
+                                    sample = newSample;
+                                    break;
+                                case 2:
+                                    sample = oldSample.add(newSample);
+                                    break;
+                                case 3:
+                                    sample = oldSample.mul(newSample);
+                                    break;
+                                case 4:
+                                    sample = isAlpha ? alpha : premult ? newSample.add(oldSample.mul(MathHelper.minusOne(newAlpha)))
+                                            : (newSample.mul(newAlpha).add(oldSample.mul(oldAlpha).mul(minusOne(newAlpha)))).div(alpha);
+                                    break;
+                                case 5:
+                                    sample = isAlpha ? alpha : premult ? oldSample.add(newSample.mul(MathHelper.minusOne(newAlpha)))
+                                            : (oldSample.mul(newAlpha).add(newSample.mul(oldAlpha).mul(MathHelper.minusOne(newAlpha)))).div(alpha);
+                                    break;
+                                case 6:
+                                    sample = isAlpha ? newAlpha : oldSample.add(alpha.mul(newSample));
+                                    break;
+                                case 7:
+                                    sample = isAlpha ? oldAlpha : newSample.add(alpha.mul(oldSample));
+                                    break;
+                                default:
+                                    throw new IllegalStateException("Challenge complete how did we get here");
+                            }
+                            sample.intoArray(frameBuffer[d][oldY], oldX);
+                        }
+
+                        for (; x < patch.width; x++) {
                             int oldX = x + x0;
                             int oldY = y + y0;
                             int newX = x + patch.origin.x;
@@ -140,9 +201,9 @@ public class JXLCodestreamDecoder {
                             float alpha = 0f, newAlpha = 0f, oldAlpha = 0f;
                             if (info.mode > 3) {
                                 oldAlpha = imageHeader.hasAlpha() ?
-                                    frameBuffer[colorChannels + info.alphaChannel][oldY][oldX] : 1.0f;
+                                        frameBuffer[colorChannels + info.alphaChannel][oldY][oldX] : 1.0f;
                                 newAlpha = imageHeader.hasAlpha() ?
-                                    refBuffer[colorChannels + info.alphaChannel][newY][newX] : 1.0f;
+                                        refBuffer[colorChannels + info.alphaChannel][newY][newX] : 1.0f;
                                 if (info.clamp)
                                     newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
                                 if (info.mode < 6 || !isAlpha || !premult)
@@ -164,11 +225,11 @@ public class JXLCodestreamDecoder {
                                     break;
                                 case 4:
                                     sample = isAlpha ? alpha : premult ? newSample + oldSample * (1 - newAlpha)
-                                        : (newSample * newAlpha + oldSample * oldAlpha * (1 - newAlpha)) / alpha;
+                                            : (newSample * newAlpha + oldSample * oldAlpha * (1 - newAlpha)) / alpha;
                                     break;
                                 case 5:
                                     sample = isAlpha ? alpha : premult ? oldSample + newSample * (1 - newAlpha)
-                                        : (oldSample * newAlpha + newSample * oldAlpha * (1 - newAlpha)) / alpha;
+                                            : (oldSample * newAlpha + newSample * oldAlpha * (1 - newAlpha)) / alpha;
                                     break;
                                 case 6:
                                     sample = isAlpha ? newAlpha : oldSample + alpha * newSample;
@@ -195,7 +256,21 @@ public class JXLCodestreamDecoder {
         if (frame.getFrameHeader().doYCbCr) {
             IntPoint size = frame.getPaddedFrameSize();
             for (int y = 0; y < size.y; y++) {
-                for (int x = 0; x < size.x; x++) {
+                int upperBound = SPECIES.loopBound(size.x) * SPECIES.length();
+
+                int x = 0;
+
+                for (; x < upperBound; x += SPECIES.length()) {
+                    FloatVector cb = FloatVector.fromArray(SPECIES, frameBuffer[0][y], x);
+
+                    FloatVector yh = FloatVector.fromArray(SPECIES, frameBuffer[1][y], x).add(0.50196078431372549019f);
+                    FloatVector cr = FloatVector.fromArray(SPECIES, frameBuffer[2][y], x);
+                    yh.add(cr.mul(1.402f)).intoArray(frameBuffer[0][y], x);
+                    yh.sub(cb.mul(0.34413628620102214650f)).sub(cr.mul(0.71413628620102214650f)).intoArray(frameBuffer[1][y], x);
+                    yh.add(cb.mul(1.772f)).intoArray(frameBuffer[2][y], x);
+                }
+
+                for (; x < size.x; x++) {
                     float cb = frameBuffer[0][y][x];
                     float yh = frameBuffer[1][y][x] + 0.50196078431372549019f;
                     float cr = frameBuffer[2][y][x];
@@ -246,7 +321,17 @@ public class JXLCodestreamDecoder {
                 case FrameFlags.BLEND_ADD:
                     for (int y = 0; y < frameSize.y; y++) {
                         int cy = y + frameStart.y;
-                        for (int x = 0; x < frameSize.x; x++) {
+
+                        var upperBound = SPECIES.loopBound(canvas[c][cy].length) * SPECIES.length();
+
+                        var x = 0;
+
+                        for (; x < upperBound; x += SPECIES.length()) {
+                            int cx = x + frameStart.x;
+                            FloatVector.fromArray(SPECIES, ref[cy], cx).add(FloatVector.fromArray(SPECIES, frameBuffer[y], x)).intoArray(canvas[c][cy], cx);
+                        }
+
+                        for (; x < frameSize.x; x++) {
                             int cx = x + frameStart.x;
                             canvas[c][cy][cx] = ref[cy][cx] + frameBuffer[y][x];
                         }
@@ -256,7 +341,20 @@ public class JXLCodestreamDecoder {
                     for (int y = 0; y < frameSize.y; y++) {
                         int cy = y + frameStart.y;
                         if (ref != null) {
-                            for (int x = 0; x < frameSize.x; x++) {
+
+                            var upperBound = SPECIES.loopBound(canvas[c][cy].length) * SPECIES.length();
+
+                            var x = 0;
+
+                            for (; x < upperBound; x += SPECIES.length()) {
+                                int cx = x + frameStart.x;
+                                FloatVector newSample = FloatVector.fromArray(SPECIES, frameBuffer[y], x);
+                                if (info.clamp)
+                                    newSample = MathHelper.clamp(newSample, 0.0f, 1.0f);
+                                newSample.mul(FloatVector.fromArray(SPECIES, ref[cy], cx)).intoArray(canvas[c][cy], cx);
+                            }
+
+                            for (; x < frameSize.x; x++) {
                                 int cx = x + frameStart.x;
                                 float newSample = frameBuffer[y][x];
                                 if (info.clamp)
@@ -270,7 +368,26 @@ public class JXLCodestreamDecoder {
                     break;
                 case FrameFlags.BLEND_BLEND:
                     for (int cy = frameStart.y; cy < frameSize.y + frameStart.y; cy++) {
-                        for (int cx = frameStart.x; cx < frameSize.x + frameStart.x; cx++) {
+                        var upperBound = SPECIES.loopBound(frameSize.x) * SPECIES.length();
+
+                        var cx = frameStart.x;
+
+                        for (; cx < upperBound + frameStart.x; cx += SPECIES.length()) {
+                            FloatVector oldAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f) : ref != null ? FloatVector.fromArray(SPECIES, refBuffer[imageColors + info.alphaChannel][cy], cx) : FloatVector.zero(SPECIES);
+                            FloatVector newAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f)
+                                    : frame.getSampleVector(frameColors + info.alphaChannel, cx, cy);
+                            if (info.clamp)
+                                newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                            FloatVector alpha = FloatVector.broadcast(SPECIES, 1.0f);
+                            FloatVector oldSample = ref != null ? FloatVector.fromArray(SPECIES, ref[cy], cx) : FloatVector.zero(SPECIES);
+                            FloatVector newSample = frame.getSampleVector(frameC, cx, cy);
+                            if (isAlpha || !premult)
+                                alpha = oldAlpha.add(newAlpha.mul(MathHelper.minusOne(oldAlpha)));
+                            (isAlpha ? alpha : premult ? newSample.add(oldSample.mul(MathHelper.minusOne(newAlpha)))
+                                    : newSample.mul(newAlpha).add(oldSample.mul(oldAlpha.mul(MathHelper.minusOne(newAlpha)))).div(alpha)).intoArray(canvas[c][cy], cx);
+                        }
+
+                        for (; cx < frameSize.x + frameStart.x; cx++) {
                             float oldAlpha = !imageHeader.hasAlpha() ? 1.0f : ref != null ?
                                 refBuffer[imageColors + info.alphaChannel][cy][cx] : 0.0f;
                             float newAlpha = !imageHeader.hasAlpha() ? 1.0f
@@ -289,7 +406,24 @@ public class JXLCodestreamDecoder {
                     break;
                 case FrameFlags.BLEND_MULADD:
                     for (int cy = frameStart.y; cy < frameSize.y + frameStart.y; cy++) {
-                        for (int cx = frameStart.x; cx < frameSize.x + frameStart.x; cx++) {
+
+                        var upperBound = SPECIES.loopBound(frameSize.x) * SPECIES.length();
+
+                        var cx = frameStart.x;
+
+                        for (; cx < upperBound + frameStart.x; cx += SPECIES.length()) {
+                            FloatVector oldAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f) : ref != null ?
+                                    FloatVector.fromArray(SPECIES, refBuffer[imageColors + info.alphaChannel][cy], cx) : FloatVector.zero(SPECIES);
+                            FloatVector newAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f)
+                                    : frame.getSampleVector(frameColors + info.alphaChannel, cx, cy);
+                            if (info.clamp)
+                                newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                            FloatVector oldSample = ref != null ? FloatVector.fromArray(SPECIES, ref[cy], cx) : FloatVector.zero(SPECIES);
+                            float newSample = frame.getSample(frameC, cx, cy);
+                            (isAlpha ? oldAlpha : oldSample.add(newAlpha.mul(newSample))).intoArray(canvas[c][cy], cx);
+                        }
+
+                        for (; cx < frameSize.x + frameStart.x; cx++) {
                             float oldAlpha = !imageHeader.hasAlpha() ? 1.0f : ref != null ?
                                 refBuffer[imageColors + info.alphaChannel][cy][cx] : 0.0f;
                                 float newAlpha = !imageHeader.hasAlpha() ? 1.0f

@@ -1,8 +1,13 @@
 package com.traneptora.jxlatte.util;
 
+import jdk.incubator.vector.FloatVector;
+import jdk.incubator.vector.VectorSpecies;
+
 import java.util.Arrays;
+import java.util.Vector;
 
 public final class MathHelper {
+    public static VectorSpecies<Float> SPECIES = FloatVector.SPECIES_PREFERRED;
 
     public static final float SQRT_2 = (float)StrictMath.sqrt(2.0D);
     public static final float SQRT_H = (float)StrictMath.sqrt(0.5D);
@@ -205,9 +210,17 @@ public final class MathHelper {
     }
 
     public static float clamp(float v, float a, float b) {
-        float lower = a < b ? a : b;
-        float upper = a < b ? b : a;
-        return v < lower ? lower : v > upper ? upper : v;
+        float lower = Math.min(a, b);
+        float upper = Math.max(a, b);
+        return v < lower ? lower : Math.min(v, upper);
+    }
+
+    public static FloatVector clamp(FloatVector v, float a, float b) {
+        float lower = Math.min(a, b);
+        float upper = Math.max(a, b);
+        FloatVector lowerVec = FloatVector.broadcast(SPECIES, lower);
+        FloatVector upperVec = FloatVector.broadcast(SPECIES, upper);
+        return v.max(lowerVec).min(upperVec);
     }
 
     public static float[] matrixMutliply(final float[][] matrix, final float[] columnVector) {
@@ -337,4 +350,10 @@ public final class MathHelper {
     }
 
     private MathHelper() {}
+
+    public static FloatVector minusOne(FloatVector vector) {
+        var one = FloatVector.broadcast(SPECIES, 1.0f);
+
+        return one.sub(vector);
+    }
 }

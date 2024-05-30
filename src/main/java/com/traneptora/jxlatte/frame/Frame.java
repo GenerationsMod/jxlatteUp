@@ -35,6 +35,9 @@ import com.traneptora.jxlatte.util.MathHelper;
 import com.traneptora.jxlatte.util.TaskList;
 import com.traneptora.jxlatte.util.functional.ExceptionalFunction;
 import com.traneptora.jxlatte.util.functional.FunctionalHelper;
+import jdk.incubator.vector.FloatVector;
+
+import static com.traneptora.jxlatte.util.MathHelper.SPECIES;
 
 public class Frame {
 
@@ -639,14 +642,13 @@ public class Frame {
                                 outputBuffer[c][y][x] = buffer[c][y][x];
                             continue;
                         }
-                        for (int j = 0; j < pc.length; j++) {
-                            final IntPoint ip = pc[j];
+                        for (final IntPoint ip : pc) {
                             final int nX = x + ip.x;
                             final int nY = y + ip.y;
                             final int mX = MathHelper.mirrorCoordinate(nX, size.x);
                             final int mY = MathHelper.mirrorCoordinate(nY, size.y);
                             final float dist = i == 2 ? epfDistance2(buffer, outputBuffer.length, x, y, nX, nY, size)
-                                : epfDistance1(buffer, outputBuffer.length, x, y, nX, nY, size);
+                                    : epfDistance1(buffer, outputBuffer.length, x, y, nX, nY, size);
                             final float weight = epfWeight(sigmaScale, dist, s, x, y);
                             sumWeights += weight;
                             for (int c = 0; c < outputBuffer.length; c++)
@@ -674,8 +676,7 @@ public class Frame {
         for (int c = 0; c < colors; c++) {
             final float[][] buffC = buffer[c];
             final float scale = header.restorationFilter.epfChannelScale[c];
-            for (int i = 0; i < epfCross.length; i++) {
-                final IntPoint p = epfCross[i];
+            for (final IntPoint p : epfCross) {
                 final int pX = MathHelper.mirrorCoordinate(basePosX + p.x, size.x);
                 final int pY = MathHelper.mirrorCoordinate(basePosY + p.y, size.y);
                 final int dX = MathHelper.mirrorCoordinate(distPosX + p.x, size.x);
@@ -970,6 +971,15 @@ public class Frame {
             || y - header.origin.y >= height
             ? 0 : buffer[c][y - header.origin.y][x - header.origin.x];
     }
+
+    /* gets the sample for the IMAGE position x and y */
+    public FloatVector getSampleVector(int c, int x, int y) {
+        return x < header.origin.x || y < header.origin.y
+                || x - header.origin.x >= width
+                || y - header.origin.y >= height
+                ? FloatVector.zero(SPECIES) : FloatVector.fromArray(SPECIES, buffer[c][y - header.origin.y], x - header.origin.x);
+    }
+
 
     public void printDebugInfo() {
         loggers.log(Loggers.LOG_VERBOSE, "Frame Info:");
