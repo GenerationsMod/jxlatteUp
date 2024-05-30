@@ -137,7 +137,7 @@ public class JXLCodestreamDecoder {
 
                     for (int y = 0; y < patch.height; y++) {
 
-                        int upperBound = SPECIES.loopBound(patch.width) * SPECIES.length();
+                        int upperBound = SPECIES.loopBound(patch.width);
 
                         int x = 0;
 
@@ -256,7 +256,7 @@ public class JXLCodestreamDecoder {
         if (frame.getFrameHeader().doYCbCr) {
             IntPoint size = frame.getPaddedFrameSize();
             for (int y = 0; y < size.y; y++) {
-                int upperBound = SPECIES.loopBound(size.x) * SPECIES.length();
+                int upperBound = SPECIES.loopBound(size.x);
 
                 int x = 0;
 
@@ -322,7 +322,7 @@ public class JXLCodestreamDecoder {
                     for (int y = 0; y < frameSize.y; y++) {
                         int cy = y + frameStart.y;
 
-                        var upperBound = SPECIES.loopBound(canvas[c][cy].length) * SPECIES.length();
+                        var upperBound = SPECIES.loopBound(canvas[c][cy].length);
 
                         var x = 0;
 
@@ -342,7 +342,7 @@ public class JXLCodestreamDecoder {
                         int cy = y + frameStart.y;
                         if (ref != null) {
 
-                            var upperBound = SPECIES.loopBound(canvas[c][cy].length) * SPECIES.length();
+                            var upperBound = SPECIES.loopBound(canvas[c][cy].length);
 
                             var x = 0;
 
@@ -368,7 +368,7 @@ public class JXLCodestreamDecoder {
                     break;
                 case FrameFlags.BLEND_BLEND:
                     for (int cy = frameStart.y; cy < frameSize.y + frameStart.y; cy++) {
-                        var upperBound = SPECIES.loopBound(frameSize.x) * SPECIES.length();
+                        var upperBound = SPECIES.loopBound(frameSize.x);
 
                         var cx = frameStart.x;
 
@@ -407,7 +407,7 @@ public class JXLCodestreamDecoder {
                 case FrameFlags.BLEND_MULADD:
                     for (int cy = frameStart.y; cy < frameSize.y + frameStart.y; cy++) {
 
-                        var upperBound = SPECIES.loopBound(frameSize.x) * SPECIES.length();
+                        var upperBound = SPECIES.loopBound(frameSize.x);
 
                         var cx = frameStart.x;
 

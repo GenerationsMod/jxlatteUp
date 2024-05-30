@@ -232,7 +232,15 @@ public final class MathHelper {
         float[] total = new float[matrix.length + extra];
         for (int y = 0; y < matrix.length; y++) {
             final float[] row = matrix[y];
-            for (int x = 0; x < row.length; x++)
+
+            var x = 0;
+
+            var upperBound = SPECIES.loopBound(row.length);
+
+            for (; x < upperBound; x += SPECIES.length())
+                FloatVector.fromArray(SPECIES, total, y).add(FloatVector.fromArray(SPECIES, row, x).mul(FloatVector.fromArray(SPECIES, columnVector, x))).intoArray(total, x);
+
+            for (; x < row.length; x++)
                 total[y] += row[x] * columnVector[x];
         }
         if (extra != 0)
@@ -248,7 +256,15 @@ public final class MathHelper {
         float[] total = new float[matrix[0].length];
         for (int y = 0; y < rowVector.length; y++) {
             final float[] row = matrix[y];
-            for (int x = 0; x < total.length; x++)
+
+            var x = 0;
+
+            var upperBound = SPECIES.loopBound(total.length);
+
+            for (; x < upperBound; x += SPECIES.length())
+                FloatVector.fromArray(SPECIES, total, x).add(FloatVector.fromArray(SPECIES, rowVector, y).mul(FloatVector.fromArray(SPECIES, row, x))).intoArray(total, x);
+
+            for (; x < total.length; x++)
                 total[x] += rowVector[y] * row[x];
         }
         return total;
