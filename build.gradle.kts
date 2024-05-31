@@ -7,8 +7,32 @@ plugins {
 group = "com.traneptora"
 version = "2.1.0"
 
-repositories.mavenCentral()
-dependencies.compileOnly("org.jetbrains:annotations:24.1.0")
+java {
+    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly("org.jetbrains:annotations:24.1.0")
+}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.addAll(listOf("--add-modules", "jdk.incubator.vector"))
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    jvmArgs("--add-modules", "jdk.incubator.vector")
+}
+
+
+tasks.withType<JavaExec> {
+    jvmArgs = listOf("--add-modules=jdk.incubator.vector")
+}
 
 publishing {
     publications.create<MavenPublication>("mavenCommon").from(components["java"])

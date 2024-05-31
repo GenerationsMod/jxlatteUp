@@ -37,6 +37,7 @@ import com.traneptora.jxlatte.util.functional.ExceptionalFunction;
 import com.traneptora.jxlatte.util.functional.FunctionalHelper;
 import jdk.incubator.vector.FloatVector;
 
+
 import static com.traneptora.jxlatte.util.MathHelper.SPECIES;
 
 public class Frame {

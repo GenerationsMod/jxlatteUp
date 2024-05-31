@@ -24,9 +24,6 @@ import com.traneptora.jxlatte.util.FlowHelper;
 import com.traneptora.jxlatte.util.IntPoint;
 import com.traneptora.jxlatte.util.MathHelper;
 import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
-
 import static com.traneptora.jxlatte.util.MathHelper.SPECIES;
 import static com.traneptora.jxlatte.util.MathHelper.minusOne;
 
@@ -153,7 +150,7 @@ public class JXLCodestreamDecoder {
                                 oldAlpha = imageHeader.hasAlpha() ? FloatVector.fromArray(SPECIES, frameBuffer[colorChannels + info.alphaChannel][oldY], oldX) : FloatVector.broadcast(SPECIES, 1.0f);
                                 newAlpha = imageHeader.hasAlpha() ? FloatVector.fromArray(SPECIES, refBuffer[colorChannels + info.alphaChannel][newY], newX) : FloatVector.broadcast(SPECIES, 1.0f);
                                 if (info.clamp)
-                                    newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                                    newAlpha = MathHelper.clampVector(newAlpha, 0.0f, 1.0f);
                                 if (info.mode < 6 || !isAlpha || !premult)
                                     alpha = oldAlpha.add(newAlpha.mul(MathHelper.minusOne(oldAlpha)));
                             }
@@ -350,7 +347,7 @@ public class JXLCodestreamDecoder {
                                 int cx = x + frameStart.x;
                                 FloatVector newSample = FloatVector.fromArray(SPECIES, frameBuffer[y], x);
                                 if (info.clamp)
-                                    newSample = MathHelper.clamp(newSample, 0.0f, 1.0f);
+                                    newSample = MathHelper.clampVector(newSample, 0.0f, 1.0f);
                                 newSample.mul(FloatVector.fromArray(SPECIES, ref[cy], cx)).intoArray(canvas[c][cy], cx);
                             }
 
@@ -377,7 +374,7 @@ public class JXLCodestreamDecoder {
                             FloatVector newAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f)
                                     : frame.getSampleVector(frameColors + info.alphaChannel, cx, cy);
                             if (info.clamp)
-                                newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                                newAlpha = MathHelper.clampVector(newAlpha, 0.0f, 1.0f);
                             FloatVector alpha = FloatVector.broadcast(SPECIES, 1.0f);
                             FloatVector oldSample = ref != null ? FloatVector.fromArray(SPECIES, ref[cy], cx) : FloatVector.zero(SPECIES);
                             FloatVector newSample = frame.getSampleVector(frameC, cx, cy);
@@ -417,7 +414,7 @@ public class JXLCodestreamDecoder {
                             FloatVector newAlpha = !imageHeader.hasAlpha() ? FloatVector.broadcast(SPECIES, 1.0f)
                                     : frame.getSampleVector(frameColors + info.alphaChannel, cx, cy);
                             if (info.clamp)
-                                newAlpha = MathHelper.clamp(newAlpha, 0.0f, 1.0f);
+                                newAlpha = MathHelper.clampVector(newAlpha, 0.0f, 1.0f);
                             FloatVector oldSample = ref != null ? FloatVector.fromArray(SPECIES, ref[cy], cx) : FloatVector.zero(SPECIES);
                             float newSample = frame.getSample(frameC, cx, cy);
                             (isAlpha ? oldAlpha : oldSample.add(newAlpha.mul(newSample))).intoArray(canvas[c][cy], cx);

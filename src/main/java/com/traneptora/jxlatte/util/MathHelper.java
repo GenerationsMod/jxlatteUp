@@ -215,7 +215,7 @@ public final class MathHelper {
         return v < lower ? lower : Math.min(v, upper);
     }
 
-    public static FloatVector clamp(FloatVector v, float a, float b) {
+    public static FloatVector clampVector(FloatVector v, float a, float b) {
         float lower = Math.min(a, b);
         float upper = Math.max(a, b);
         FloatVector lowerVec = FloatVector.broadcast(SPECIES, lower);
